@@ -1,0 +1,229 @@
+CREATE OR REPLACE PROCEDURE create_order(
+    p_car NUMBER,
+	p_client NUMBER,
+	p_start_date DATE,
+	p_end_date DATE
+) IS
+current_date TIMESTAMP(0);
+v_car_check VARCHAR2(5);
+r_rent_price NUMBER;
+r_order_id NUMBER;
+r_order_sum NUMBER;
+r_order_status NUMBER := 1;
+BEGIN
+	SELECT check_car_free(p_car,p_start_date,p_end_date) INTO v_car_check FROM dual;
+	IF v_car_check = 'FALSE' THEN
+		DBMS_OUTPUT.put_line('Car is unavailable for this dates!');
+	ELSE
+		SELECT rent_price INTO r_rent_price FROM admin.cars WHERE car_id = p_car;
+		SELECT CURRENT_DATE INTO current_date FROM dual;
+		INSERT INTO admin.orders(car,client,order_status,start_date,end_date,order_sum)
+		VALUES(p_car,p_client,r_order_status,p_start_date,p_end_date,
+		(p_end_date-p_start_date)* r_rent_price);
+		SELECT order_id, order_sum INTO r_order_id,r_order_sum 
+		FROM admin.orders WHERE car = p_car AND start_date = p_start_date;
+		INSERT INTO admin.order_history(order_id,car,client,order_status,
+		start_date,end_date,order_sum,record_datetime)
+		VALUES(r_order_id,p_car,p_client,r_order_status, p_start_date,p_end_date,r_order_sum,current_date);
+		INSERT INTO admin.car_occupied(car_id,start_date,end_date)
+		VALUES(p_car,p_start_date,p_end_date);
+	END IF;
+END;
+/
+
+CREATE OR REPLACE PROCEDURE get_order_by_id(
+	p_order_id IN NUMBER
+) IS
+  r_order admin.orders%ROWTYPE;
+  r_status_description VARCHAR2(20);
+BEGIN
+	IF p_order_id IS NOT NULL THEN
+		SELECT * INTO r_order FROM admin.orders WHERE order_id = p_order_id;
+		SELECT status_description INTO r_status_description 
+		FROM admin.order_status WHERE status_id = r_order.order_status;
+		DBMS_OUTPUT.put_line(r_order.order_id || ' ' || r_order.car || ' ' || 
+		r_order.client || ' ' || r_order.start_date || ' ' || r_order.end_date || ' ' ||
+		r_order.order_sum || ' ' || r_status_description);
+	ELSE 
+		dbms_output.put_line('Order not found!');
+	END IF;
+	EXCEPTION
+    WHEN OTHERS THEN
+      dbms_output.put_line( 'Order not found!');
+END;
+/
+
+CREATE OR REPLACE PROCEDURE update_order_not_status(
+	p_order_id IN NUMBER,
+	p_car NUMBER,
+	p_client NUMBER,
+	p_start_date DATE,
+	p_end_date DATE,
+	p_order_sum NUMBER
+) IS
+v_car_check VARCHAR2(5);
+current_date TIMESTAMP(0);
+r_current_status NUMBER;
+BEGIN
+	SELECT check_car_free(p_car,p_start_date,p_end_date) INTO v_car_check FROM dual;
+	IF v_car_check = 'FALSE' THEN
+		DBMS_OUTPUT.put_line('This car is unavailable for this dates! Can`t update order!');
+	ELSE
+		SELECT order_status INTO r_current_status FROM admin.orders WHERE order_id = p_order_id;
+		IF r_current_status = 1 OR r_current_status = 3 THEN
+			UPDATE admin.orders
+			SET car = p_car,
+			client = p_client,
+			start_date = p_start_date,
+			end_date = p_end_date,
+			order_sum = p_order_sum
+			WHERE
+			order_id = p_order_id;
+			SELECT CURRENT_DATE INTO current_date FROM dual;
+			INSERT INTO admin.order_history(order_id,car,client,order_status,
+			start_date,end_date,order_sum,record_datetime)
+			VALUES(p_order_id,p_car,p_client,r_current_status,
+			p_start_date,p_end_date,p_order_sum,current_date);
+		ELSE
+			dbms_output.put_line( 'Can`t change finalized order!');
+		END IF;
+	END IF;
+END;
+/
+
+CREATE OR REPLACE PROCEDURE update_order_with_status(
+	p_order_id IN NUMBER,
+	p_car NUMBER,
+	p_client NUMBER,
+	p_order_status NUMBER,
+	p_start_date DATE,
+	p_end_date DATE,
+	p_order_sum NUMBER
+) IS
+	v_car_check VARCHAR2(5);
+	current_date TIMESTAMP(0);
+	r_order_decline NUMBER := 2;
+	r_order_in_progress NUMBER := 3;
+	r_order_closed NUMBER := 4;
+	r_car_status_ordered NUMBER := 2;
+	r_car_status_free NUMBER := 1;
+BEGIN
+	SELECT check_car_free(p_car,p_start_date,p_end_date) INTO v_car_check FROM dual;
+	IF v_car_check = 'FALSE' THEN
+		DBMS_OUTPUT.put_line('This car is unavailable for this dates! Can`t update order!');
+	ELSE
+		UPDATE admin.orders
+		SET car = p_car,
+		client = p_client,
+		start_date = p_start_date,
+		end_date = p_end_date,
+		order_status = p_order_status,
+		order_sum = p_order_sum
+		WHERE
+		order_id = p_order_id;
+		SELECT CURRENT_DATE INTO current_date FROM dual;
+		INSERT INTO admin.order_history(order_id,car,client,order_status,
+		start_date,end_date,order_sum,record_datetime)
+		VALUES(p_order_id,p_car,p_client,p_order_status,
+		p_start_date,p_end_date,p_order_sum,current_date);
+		IF p_order_status = r_order_decline THEN
+			DELETE FROM admin.car_occupied WHERE car_id = p_car AND start_date = p_start_date AND
+			end_date = p_end_date;
+		ELSIF p_order_status = r_order_in_progress THEN
+			INSERT INTO admin.car_history(car_id,car_status,record_datetime,order_id)
+			VALUES(p_car,r_car_status_ordered,current_date,p_order_id);
+			UPDATE admin.cars SET status = r_car_status_ordered
+			WHERE car_id = p_car;
+		ELSIF p_order_status = r_order_closed THEN
+			DELETE FROM admin.car_occupied WHERE car_id = p_car AND start_date = p_start_date AND
+			end_date = p_end_date;
+			INSERT INTO admin.car_history(car_id,car_status,record_datetime)
+			VALUES(p_car,r_car_status_free,current_date);
+			UPDATE admin.cars SET status = r_car_status_free
+			WHERE car_id = p_car;
+		END IF;
+	END IF;
+END;
+/
+
+CREATE OR REPLACE PROCEDURE delete_order(
+	p_order_id IN NUMBER
+) IS
+	r_order admin.orders%ROWTYPE;
+	r_created_status NUMBER := 1;
+	r_declined_status NUMBER := 2;
+	r_in_progress_status NUMBER := 3;
+	r_closed_status NUMBER := 4;
+	r_deleted_status NUMBER := 5;
+	current_date TIMESTAMP(0);
+BEGIN
+	SELECT * INTO r_order FROM admin.orders 
+	WHERE order_id = p_order_id;
+	SELECT CURRENT_DATE INTO current_date FROM dual;
+	IF r_order.order_status = r_in_progress_status THEN
+		dbms_output.put_line( 'Can`t delete active order!');
+	ELSIF r_order.order_status = r_created_status THEN
+		INSERT INTO admin.order_history(order_id,car,client,order_status,
+		start_date,end_date,order_sum,record_datetime)
+		VALUES(r_order.order_id,r_order.car,r_order.client,r_deleted_status,
+		r_order.start_date,r_order.end_date,r_order.order_sum,current_date);
+		DELETE FROM admin.car_occupied WHERE car_id = r_order.car 
+		AND start_date = r_order.start_date AND end_date = r_order.end_date;
+		DELETE FROM admin.orders WHERE order_id = p_order_id;
+	ELSE
+		INSERT INTO admin.order_history(order_id,car,client,order_status,
+		start_date,end_date,order_sum,record_datetime)
+		VALUES(r_order.order_id,r_order.car,r_order.client,r_deleted_status,
+		r_order.start_date,r_order.end_date,r_order.order_sum,current_date);
+		DELETE FROM admin.orders WHERE order_id = p_order_id;
+	END IF;	
+END;
+/
+
+
+
+select * from admin.orders;
+Select * from admin.car_occupied;
+Select * from admin.order_history;
+EXEC create_order(5,1,TO_DATE('2023-11-05','YYYY-MM-DD'),TO_DATE('2023-11-06','YYYY-MM-DD'));
+select * from admin.orders;
+Select * from admin.car_occupied;
+Select * from admin.order_history;
+---------------------
+EXEC get_order_by_id(10);
+-------------------
+select * from admin.orders;
+Select * from admin.order_history;
+EXEC update_order_not_status(1,4,2,TO_DATE('2023-10-30','YYYY-MM-DD'),TO_DATE('2023-11-03','YYYY-MM-DD'),	5510);
+EXEC update_order_not_status(5,4,5,TO_DATE('2023-11-05','YYYY-MM-DD'),TO_DATE('2023-11-06','YYYY-MM-DD'),	2510);
+select * from admin.orders;
+Select * from admin.order_history;
+-------------------
+select * from admin.orders;
+Select * from admin.car_occupied;
+Select * from admin.order_history;
+Select * from admin.cars;
+Select * from admin.order_history;
+EXEC  update_order_with_status(5,4,5,2,TO_DATE('2023-11-05','YYYY-MM-DD'),TO_DATE('2023-11-06','YYYY-MM-DD'),1111);
+EXEC  update_order_with_status(7,6,4,3,TO_DATE('2023-11-04','YYYY-MM-DD'),TO_DATE('2023-11-07','YYYY-MM-DD'),2222);
+EXEC  update_order_with_status(3,3,2,4,TO_DATE('2023-11-04','YYYY-MM-DD'),TO_DATE('2023-11-04','YYYY-MM-DD'),3333);
+EXEC  update_order_with_status(3,5,2,4,TO_DATE('2023-11-04','YYYY-MM-DD'),TO_DATE('2023-11-04','YYYY-MM-DD'),4444);
+select * from admin.orders;
+Select * from admin.car_occupied;
+Select * from admin.order_history;
+Select * from admin.cars;
+Select * from admin.order_history;
+----------------------------
+select * from admin.orders;
+Select * from admin.car_occupied;
+Select * from admin.order_history;
+EXEC delete_order(1);
+EXEC delete_order(7);
+EXEC delete_order(10);
+select * from admin.orders;
+Select * from admin.car_occupied;
+Select * from admin.order_history;
+
+
+--------------
+update  - check car free for new date

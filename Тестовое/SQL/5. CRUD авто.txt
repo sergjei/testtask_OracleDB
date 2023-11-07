@@ -1,0 +1,200 @@
+CREATE OR REPLACE PROCEDURE create_car(
+    p_brand VARCHAR2,
+	p_model VARCHAR2,
+	p_color VARCHAR2,
+	p_type VARCHAR2,
+    p_licence_plate VARCHAR2
+) IS
+current_date TIMESTAMP(0);
+p_car_id NUMBER;
+BEGIN
+	SELECT CURRENT_DATE INTO current_date FROM dual;
+    INSERT INTO admin.cars (brand,model,color,type,licence_plate,status,rent_price)
+	VALUES (p_brand, p_model,p_color,p_type,p_licence_plate,1,1000);
+	SELECT car_id INTO p_car_id FROM admin.cars WHERE licence_plate = p_licence_plate;
+	INSERT INTO admin.car_history(car_id,car_status,record_datetime)
+	VALUES(p_car_id,1,current_date);
+END;
+/
+
+CREATE OR REPLACE PROCEDURE get_car_by_id(
+	p_car_id IN NUMBER
+) IS
+  r_car admin.cars%ROWTYPE;
+  r_status_description VARCHAR2(20);
+BEGIN
+	IF p_car_id IS NOT NULL THEN
+    SELECT car_id,brand,model,color,type,licence_plate,	status,
+	rent_price INTO r_car FROM admin.cars WHERE car_id = p_car_id;
+	SELECT status_description INTO r_status_description 
+	FROM admin.car_status_type WHERE status_id = r_car.status;
+	DBMS_OUTPUT.put_line(r_car.car_id || ' ' || r_car.brand || ' ' || 
+	 r_car.model || ' ' || r_car.color || ' ' || r_car.type || ' ' ||
+	 r_car.licence_plate || ' ' || r_status_description || ' ' || r_car.rent_price);
+	ELSE 
+	dbms_output.put_line('Car not found!');
+	END IF;
+	EXCEPTION
+    WHEN OTHERS THEN
+      dbms_output.put_line( 'Car not found!');
+END;
+/
+
+CREATE OR REPLACE PROCEDURE get_car_by_licence_plate(
+	p_licence_plate VARCHAR2
+) IS
+  r_car admin.cars%ROWTYPE;
+  r_status_description VARCHAR2(20);
+BEGIN
+	IF p_licence_plate IS NOT NULL THEN
+	SELECT car_id,brand,model,color,type,licence_plate,	status,
+	rent_price INTO r_car FROM admin.cars WHERE licence_plate = p_licence_plate;
+	SELECT status_description INTO r_status_description 
+	FROM admin.car_status_type WHERE status_id = r_car.status;
+	DBMS_OUTPUT.put_line(r_car.car_id || ' ' || r_car.brand || ' ' || 
+	 r_car.model || ' ' || r_car.color || ' ' || r_car.type || ' ' ||
+	 r_car.licence_plate || ' ' || r_status_description || ' ' || r_car.rent_price);
+	ELSE 
+	dbms_output.put_line('Car not found!');
+	END IF;
+	EXCEPTION
+    WHEN OTHERS THEN
+      dbms_output.put_line( 'Car not found!');
+END;
+/
+
+CREATE OR REPLACE PROCEDURE update_car_not_status(
+	p_car_id IN NUMBER,
+	p_brand VARCHAR2,
+	p_model VARCHAR2,
+	p_color VARCHAR2,
+	p_type VARCHAR2,
+    p_licence_plate VARCHAR2,
+	p_rent_price NUMBER
+) IS
+BEGIN
+	UPDATE admin.cars
+	SET brand = p_brand,
+	model = p_model,
+	color = p_color,
+	type = p_type,
+	licence_plate = p_licence_plate,
+	rent_price = p_rent_price
+	WHERE
+	car_id = p_car_id;
+END;
+/
+
+CREATE OR REPLACE PROCEDURE update_car_with_status(
+	p_car_id IN NUMBER,
+	p_brand VARCHAR2,
+	p_model VARCHAR2,
+	p_color VARCHAR2,
+	p_type VARCHAR2,
+    p_licence_plate VARCHAR2,
+	p_status NUMBER,
+	p_rent_price NUMBER
+) IS
+current_date TIMESTAMP(0);
+BEGIN
+	SELECT CURRENT_DATE INTO current_date FROM dual;
+	UPDATE admin.cars
+	SET brand = p_brand,
+	model = p_model,
+	color = p_color,
+	type = p_type,
+	licence_plate = p_licence_plate,
+	status = p_status,
+	rent_price = p_rent_price
+	WHERE
+	car_id = p_car_id;
+	INSERT INTO admin.car_history(car_id,car_status,record_datetime)
+	VALUES(p_car_id,p_status,current_date);
+END;
+/
+CREATE OR REPLACE PROCEDURE update_car_with_status_by_order(
+	p_car_id IN NUMBER,
+	p_brand VARCHAR2,
+	p_model VARCHAR2,
+	p_color VARCHAR2,
+	p_type VARCHAR2,
+    p_licence_plate VARCHAR2,
+	p_status NUMBER,
+	p_rent_price NUMBER,
+	p_order_id NUMBER
+) IS
+current_date TIMESTAMP(0);
+BEGIN
+	SELECT CURRENT_DATE INTO current_date FROM dual;
+	UPDATE admin.cars
+	SET brand = p_brand,
+	model = p_model,
+	color = p_color,
+	type = p_type,
+	licence_plate = p_licence_plate,
+	status = p_status,
+	rent_price = p_rent_price
+	WHERE
+	car_id = p_car_id;
+	INSERT INTO admin.car_history(car_id,car_status,record_datetime,order_id)
+	VALUES(p_car_id,p_status,current_date,p_order_id);
+END;
+/
+
+CREATE OR REPLACE PROCEDURE delete_car(
+	p_car_id IN NUMBER
+) IS
+	r_order_id NUMBER;
+	r_car_status NUMBER;
+	r_ordered_status NUMBER := 2;
+	r_deleted_status NUMBER := 4;
+	current_date TIMESTAMP(0);
+BEGIN
+	SELECT status INTO r_car_status FROM admin.cars WHERE car_id = p_car_id;
+	SELECT order_id INTO r_order_id FROM 
+	(SELECT order_id FROM admin.orders WHERE car = p_car_id)
+	FETCH FIRST ROW ONLY;
+	IF r_car_status = r_ordered_status THEN
+		dbms_output.put_line( 'Can`t delete car on order!');
+	ELSIF r_order_id IS NOT NULL THEN
+		SELECT CURRENT_DATE INTO current_date FROM dual;
+		UPDATE admin.cars
+		SET status = r_deleted_status
+		WHERE
+		car_id = p_car_id;
+		INSERT INTO admin.car_history(car_id,car_status,record_datetime,order_id)
+		VALUES(p_car_id,r_deleted_status,current_date,NULL);
+	ELSE
+		INSERT INTO admin.car_history(car_id,car_status,record_datetime,order_id)
+		VALUES(p_car_id,r_deleted_status,current_date,NULL);
+		DELETE FROM admin.cars WHERE car_id = p_car_id;
+	END IF;
+END;
+/
+
+Select * from admin.cars;
+-----------------
+EXEC create_car('Hyundai','i30','Black','sedan','C111CC161');
+-----------------
+EXEC get_car_by_id(1);
+EXEC get_car_by_id(7);
+EXEC get_car_by_licence_plate('C111CC161');
+EXEC get_car_by_licence_plate('');
+EXEC get_car_by_licence_plate('C112АМ1');
+------------------
+select * from admin.cars;
+select * from admin.car_history;
+EXEC update_car_not_status(1,'BMW','X3','Purple','Crossover','C123AX123',1000);
+EXEC update_car_with_status(2,'BMW','X3','Purple','Crossover','C124AX123',3,1000);
+EXEC update_car_with_status_by_order(1,'BMW','X3','Purple','Crossover','C134AX123',2,1000,5);
+select * from admin.cars;
+select * from admin.car_history;
+-------------------
+select * from admin.cars;
+select * from admin.car_history;
+EXEC delete_car(1);
+EXEC delete_car(4);
+EXEC delete_car(3);
+select * from admin.cars;
+select * from admin.car_history;
+--------------------

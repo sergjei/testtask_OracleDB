@@ -1,0 +1,113 @@
+Отчет об истории изменения заказов. 
+-------------------
+SELECT 
+	order_id AS "Номер заказа",
+    status_description AS "Статус заказа",
+    start_date AS "Дата начала аренды",
+	end_date AS "Дата конца аренды",
+	order_sum AS "Сумма заказа",
+	car AS "ID авто",
+	client AS "ID клиента",
+	To_char(record_datetime,'YYYY-MON-DD HH24:MI:SS')  AS "Дата изменения"
+    FROM admin.order_history h
+    left join  admin.order_status s ON h.order_status = s.status_id
+    ORDER BY order_id, order_status ASC;
+--------------
+Отчет об истории изменения авто	
+----------------	
+SELECT 
+    h.car_id AS "ID авто",
+    brand AS "Марка",
+	model AS "Модель",
+	color AS "Цвет кузова",
+	type AS "Тип кузова",
+    licence_plate AS "Госномер авто",
+    status_description AS "Текущий статус авто",
+	rent_price AS "Цена аренды в сутки",
+	h.order_id AS "Номер заказа",
+	client AS "ID клиента",
+	To_char(record_datetime,'YYYY-MON-DD HH24:MI:SS') AS "Дата изменения"
+    FROM admin.car_history h
+    left join  admin.cars c ON h.car_id = c.car_id
+    left join  admin.car_status_type s ON h.car_status = s.status_id
+    left join  admin.orders o ON h.order_id = o.order_id
+    ORDER BY h.car_id, h.record_datetime ASC;
+------------------
+Отчет о фин. результатах (1 - закрытые заказы за период; 2 - Сумма по дням + итог)
+-----------------	
+SELECT  start_date AS "Дата начала аренды",
+        end_date AS "Дата окончания аренды",
+        order_id AS "Номер заказа",
+        status_description AS "Статус заказа",
+        end_date - start_date + 1 AS "Длительность аренды",
+        order_sum AS "Сумма заказа"
+    FROM admin.order_history h
+    left join admin.order_status s ON h.order_status = s.status_id
+    WHERE h.order_status <> 1 AND h.order_status <> 2 
+    AND h.start_date BETWEEN TO_DATE('2023-10-30','YYYY-MM-DD') AND (TO_DATE('2023-11-07','YYYY-MM-DD'))
+    AND h.record_datetime = (
+        SELECT MAX( h2.record_datetime)
+        FROM admin.order_history h2
+        WHERE h.order_id = h2.order_id)
+    ORDER BY start_date ASC;
+	
+SELECT  
+        COALESCE(TO_CHAR(start_date,'YYYY-MM-DD'),'ИТОГО') AS "Дата начала аренды",
+        SUM (order_sum) AS "Сумма по заказам"
+    FROM admin.order_history h
+    WHERE h.order_status <> 1 AND h.order_status <> 2 
+    AND h.start_date BETWEEN TO_DATE('2023-10-30','YYYY-MM-DD') AND (TO_DATE('2023-11-07','YYYY-MM-DD'))
+    AND h.record_datetime = (
+        SELECT MAX( h2.record_datetime)
+        FROM admin.order_history h2
+        WHERE h.order_id = h2.order_id)
+    GROUP BY  ROLLUP(start_date);
+-------------------	
+Отчет по клиентам
+------------------	
+SELECT 
+first_name || ' ' || last_name as "Клиент",
+email,
+phone_number AS "Номер телефон",
+order_id AS "Номер заказа",
+status_description AS "Последний статус заказа",
+start_date AS "Дата начала аренды",
+end_date AS "Дата конца аренды",
+order_sum AS "Рассчетная сумма",
+(SELECT order_sum FROM admin.order_history h2 WHERE c.client_id = h2.client 
+    AND h.order_id = h2.order_id AND h2.order_status = 3) AS "Оплаченая сумма",
+brand AS "Марка авто",
+model AS "Модель авто",
+licence_plate AS "Госномер авто"
+FROM admin.clients c
+LEFT JOIN  admin.order_history h ON c.client_id = h.client  
+LEFT JOIN admin.cars crs ON h.car = crs.car_id  
+LEFT JOIN admin.order_status st ON h.order_status = st.status_id
+WHERE h.record_datetime = (
+        SELECT MAX( h3.record_datetime)
+        FROM admin.order_history h3
+        WHERE h.order_id = h3.order_id)
+ORDER BY "Клиент", start_date ASC;
+		
+-----------------
+Отчет по авто (Детальный и по статусам)
+---------------
+SELECT 
+brand AS "Марка авто",
+model AS "Модель авто",
+licence_plate AS "Госномер авто",
+color AS "Цвет кузова",
+type AS "Тип кузова",
+rent_price AS "Цена суточной аренды",
+status_description AS "Статус авто"
+FROM admin.cars c
+LEFT JOIN admin.car_status_type st ON c.status = st.status_id;
+---------------------
+SELECT 
+status_description AS "Статус авто",
+count(car_id) AS "Количество авто"
+FROM admin.car_status_type st
+LEFT JOIN admin.cars c ON st.status_id = c.status
+GROUP BY status_description;
+
+-------------

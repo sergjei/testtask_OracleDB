@@ -1,0 +1,89 @@
+CREATE OR REPLACE PROCEDURE create_client(
+    p_first_name VARCHAR2,
+    p_last_name VARCHAR2,
+	p_email VARCHAR2,
+	p_phone_number VARCHAR2
+) IS
+BEGIN
+    INSERT INTO admin.clients (first_name,last_name, email,phone_number)
+	VALUES (p_first_name, p_last_name,p_email,p_phone_number);
+END;
+/
+
+CREATE OR REPLACE PROCEDURE get_client_by_id(
+	p_client_id IN NUMBER
+) IS
+  r_client admin.clients%ROWTYPE;
+BEGIN
+	IF p_client_id IS NOT NULL THEN
+    SELECT * INTO r_client FROM admin.clients WHERE client_id = p_client_id;
+	DBMS_OUTPUT.put_line(r_client.client_id || ' ' || r_client.first_name || ' ' || 
+	 r_client.last_name || ' ' || r_client.email || ' ' || r_client.phone_number);
+	ELSE 
+	dbms_output.put_line('Client not found!');
+	END IF;
+	EXCEPTION
+   WHEN OTHERS THEN
+      dbms_output.put_line( 'Client not found!');
+END;
+/
+
+CREATE OR REPLACE PROCEDURE get_client_by_email(
+	p_email IN VARCHAR2
+) IS
+  r_client admin.clients%ROWTYPE;
+BEGIN
+	IF p_email IS NOT NULL THEN
+	SELECT * INTO r_client FROM admin.clients WHERE email = p_email;
+	DBMS_OUTPUT.put_line(r_client.client_id || ' ' || r_client.first_name || ' ' || 
+	 r_client.last_name || ' ' || r_client.email || ' ' || r_client.phone_number);
+	ELSE 
+	dbms_output.put_line('Client not found!');
+	END IF;
+	EXCEPTION
+   WHEN OTHERS THEN
+      dbms_output.put_line( 'Client not found!');
+END;
+/
+
+CREATE OR REPLACE PROCEDURE update_client(
+	p_client_id IN NUMBER,
+	p_first_name VARCHAR2,
+    p_last_name VARCHAR2,
+	p_email VARCHAR2,
+	p_phone_number VARCHAR2
+) IS
+BEGIN
+	UPDATE admin.clients
+	SET first_name = p_first_name,
+	last_name = p_last_name,
+	email = p_email,
+	phone_number = p_phone_number
+	WHERE
+	client_id = p_client_id;
+END;
+/
+
+CREATE OR REPLACE PROCEDURE delete_client(
+	p_client_id IN NUMBER
+) IS
+BEGIN
+	DELETE FROM admin.clients
+	WHERE client_id = p_client_id;
+END;
+/
+
+
+Select * from admin.clients;
+--------------------
+EXEC create_client('serg','plot','asdasd@asdsad.ru','89023132313');
+--------------------
+EXEC get_client_by_id(5);
+EXEC get_client_by_id(7);
+EXEC get_client_by_email('asdasd@asdsad.ru');
+EXEC get_client_by_email('');
+EXEC get_client_by_email('alex@yandex.ru');
+--------------------
+EXEC update_client(1,'serg','plot','new@email.ru','8902313222');
+--------------------
+EXEC delete_client(6);

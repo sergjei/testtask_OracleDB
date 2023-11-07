@@ -1,0 +1,85 @@
+
+----
+CREATE OR REPLACE FUNCTION select_auto_by_parameters(
+      p_brand IN VARCHAR2 DEFAULT NULL,
+      p_model IN VARCHAR2 DEFAULT NULL,
+      p_color IN VARCHAR2 DEFAULT NULL,
+      p_type IN VARCHAR2 DEFAULT NULL,
+      p_status IN NUMBER DEFAULT NULL,
+      p_rent_price IN NUMBER DEFAULT NULL
+    ) RETURN SYS_REFCURSOR
+    IS
+     my_cursor SYS_REFCURSOR;
+   BEGIN
+     OPEN my_cursor FOR
+       SELECT *
+       FROM admin.cars
+       WHERE
+         (brand = p_brand OR p_brand IS NULL)
+         AND (model = p_model OR p_model IS NULL)
+         AND (color = p_color OR p_color IS NULL)
+         AND (type = p_type OR p_type IS NULL)
+         AND (status = p_status OR p_status IS NULL)
+         AND (rent_price = p_rent_price OR p_rent_price IS NULL);
+     RETURN my_cursor;
+   END;
+   /
+
+CREATE OR REPLACE FUNCTION check_car_free(
+p_car_id IN NUMBER,
+p_start_date IN DATE,
+p_end_date IN DATE) RETURN VARCHAR2
+IS
+result VARCHAR2(5);
+v_car_occupied_condition NUMBER;
+v_car_occupied NUMBER;
+v_car_status NUMBER;
+BEGIN
+	SELECT COUNT(car_id)INTO v_car_occupied_condition FROM admin.car_occupied 
+	WHERE car_id = p_car_id AND 
+	p_start_date NOT BETWEEN start_date AND end_date AND
+	p_end_date NOT BETWEEN start_date AND end_date;
+	SELECT COUNT(car_id)INTO v_car_occupied FROM admin.car_occupied 
+	WHERE car_id = p_car_id;
+	SELECT status INTO v_car_status FROM admin.cars WHERE car_id = p_car_id;
+	
+	IF (v_car_occupied_condition <> v_car_occupied) OR v_car_status = 3 OR v_car_status = 4 THEN
+	result := 'FALSE';
+	ELSE
+	result:= 'TRUE';
+	END IF;
+	RETURN result;
+END;
+/
+
+-----
+DECLARE
+  my_cursor SYS_REFCURSOR;
+  p_brand VARCHAR2(20) := 'Kia';
+  p_model VARCHAR2(20) := 'Seltos';
+  p_color VARCHAR2(15);
+  p_type VARCHAR2(15);
+  p_status NUMBER;
+  p_rent_price NUMBER;
+  car admin.cars%ROWTYPE;
+BEGIN
+  my_cursor := select_auto_by_parameters(p_brand, p_model, p_color, p_type,
+  p_status,p_rent_price);
+  LOOP
+    FETCH my_cursor INTO car;
+    EXIT WHEN my_cursor%NOTFOUND;
+    DBMS_OUTPUT.PUT_LINE(car.car_id || ' ' || car.brand || ' ' || car.model || ' ' || car.color 
+  || ' ' || car.type || ' ' || car.licence_plate || ' ' ||car.status || ' ' || car.rent_price );
+  END LOOP;
+  CLOSE my_cursor;
+END;
+/
+
+-----------------
+Select * from admin.car_occupied;
+Select * from admin.cars;
+select check_car_free(6, TO_DATE('2023-11-05','YYYY-MM-DD'),TO_DATE('2023-11-07','YYYY-MM-DD')) from dual;
+select check_car_free(6, TO_DATE('2023-11-05','YYYY-MM-DD'),TO_DATE('2023-11-06','YYYY-MM-DD')) from dual;
+select check_car_free(2, TO_DATE('2023-11-05','YYYY-MM-DD'),TO_DATE('2023-11-07','YYYY-MM-DD')) from dual;
+select check_car_free(4, TO_DATE('2023-11-05','YYYY-MM-DD'),TO_DATE('2023-11-06','YYYY-MM-DD')) from dual;
+select check_car_free(5, TO_DATE('2023-11-04','YYYY-MM-DD'),TO_DATE('2023-11-04','YYYY-MM-DD')) from dual;

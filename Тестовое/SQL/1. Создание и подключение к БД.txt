@@ -1,0 +1,78 @@
+/ as sysdba
+
+show pdbs;
+alter session set container = PDB$SEED;
+select FILE_NAME from dba_data_files;
+--- FILE_NAME нужен чтобы его скопировать и вставить при создании базы данных--
+conn system/password@localhost:1521 as sysdba; 
+create pluggable database CarRentDB 
+admin user admin identified by admin 
+file_name_convert = ('C:\APP\SERGJ\PRODUCT\21C\ORADATA\XE\PDBSEED\',
+'C:\APP\SERGJ\PRODUCT\21C\ORADATA\XE\CARRENTDB\');
+alter pluggable database carrentdb open read write;
+conn admin/admin@localhost:1521/carrentdb;
+
+GRANT CREATE SESSION TO admin;
+GRANT CREATE ANY TABLE TO admin;
+
+------ во измежание проблем, дал все привелегии
+
+GRANT ALL PRIVILEGES TO admin;
+
+Запросы (доп)
+----------------
+SELECT table_name  FROM    dba_tables  WHERE    owner='ADMIN';
+SELECT table_name  FROM    all_tables  WHERE    owner='ADMIN';
+
+show con_name
+
+conn system/password@localhost:1521 as sysdba;
+conn admin/admin@localhost:1521/carrentdb;
+
+SET LINESIZE 500
+set serveroutput on
+
+Вывод всех таблиц
+----------------
+Select * from admin.clients;
+Select * from admin.car_status_type;
+Select * from admin.cars;
+Select * from admin.car_occupied;
+Select * from admin.car_history;
+Select * from admin.order_status;
+Select * from admin.orders;
+Select * from admin.order_history;
+
+Удалить все таблицы
+-------------------
+BEGIN
+  FOR rec IN
+    (
+      SELECT
+        table_name
+      FROM
+        all_tables
+      WHERE
+        owner='ADMIN'
+    )
+  LOOP
+    EXECUTE immediate 'DROP TABLE  admin.'||rec.table_name || ' CASCADE CONSTRAINTS';
+  END LOOP;
+END;
+/
+Удалить все процедуры и функции
+---------------------
+BEGIN
+  for i in (select object_name from ALL_PROCEDURES where owner ='ADMIN' AND object_type = 'PROCEDURE')
+  loop
+    execute immediate 'drop procedure ' || i.object_name;
+  end loop;
+END;
+/
+BEGIN
+  for i in (select object_name from ALL_PROCEDURES where owner ='ADMIN'AND object_type = 'FUNCTION')
+  loop
+    execute immediate 'drop function ' || i.object_name;
+  end loop;
+END;
+/
